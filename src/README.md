@@ -5,7 +5,9 @@ A super simple FastAPI application that allows students to view and sign up for 
 ## Features
 
 - View all available extracurricular activities
-- Sign up for activities
+- Browse clubs and join them
+- Register for activities hosted by clubs you have joined
+- Persist club memberships and activity registrations in SQLite
 
 ## Getting Started
 
@@ -29,8 +31,11 @@ A super simple FastAPI application that allows students to view and sign up for 
 
 | Method | Endpoint                                                          | Description                                                         |
 | ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
-| GET    | `/activities`                                                     | Get all activities with their details and current participant count |
-| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Sign up for an activity                                             |
+| GET    | `/clubs?email=student@mergington.edu`                             | List clubs and show membership state for the supplied email         |
+| POST   | `/clubs/{club_name}/join?email=student@mergington.edu`            | Join a club                                                         |
+| GET    | `/activities?email=student@mergington.edu`                        | List activities, host clubs, and membership state                   |
+| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Register for an activity after joining its host club                |
+| DELETE | `/activities/{activity_name}/unregister?email=student@mergington.edu` | Unregister from an activity                                      |
 
 ## Data Model
 
@@ -47,4 +52,4 @@ The application uses a simple data model with meaningful identifiers:
    - Name
    - Grade level
 
-All data is stored in memory, which means data will be reset when the server restarts.
+Clubs, memberships, and registrations are stored in `src/activities.db` and remain available after the server restarts. Set `ACTIVITY_DATABASE_PATH` to use a different SQLite file.
