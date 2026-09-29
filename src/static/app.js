@@ -1,19 +1,29 @@
 document.addEventListener("DOMContentLoaded", () => {
   const activitiesList = document.getElementById("activities-list");
+  const clubsList = document.getElementById("clubs-list");
+  const studentEmailInput = document.getElementById("student-email");
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
-  // Function to fetch activities from API
+  studentEmailInput.value = localStorage.getItem("student-email") || "";
+
+  function showMessage(message, type) {
+    messageDiv.textContent = message;
+    messageDiv.className = type;
+    setTimeout(() => messageDiv.classList.add("hidden"), 5000);
+  }
+
   async function fetchActivities() {
     try {
-      const response = await fetch("/activities");
+      const email = encodeURIComponent(studentEmailInput.value.trim());
+      const response = await fetch(`/activities?email=${email}`);
+      if (!response.ok) throw new Error("Failed to load activities");
       const activities = await response.json();
 
-      // Clear loading message
       activitiesList.innerHTML = "";
+      activitySelect.replaceChildren(new Option("-- Select an activity --", ""));
 
-      // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
@@ -41,6 +51,8 @@ document.addEventListener("DOMContentLoaded", () => {
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
+          <p><strong>Club:</strong> ${details.club_name}</p>
+          <p class="membership-state">${details.is_member ? "You are a member" : `Join ${details.club_name} to register`}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
           <div class="participants-container">
             ${participantsHTML}
@@ -49,14 +61,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         activitiesList.appendChild(activityCard);
 
-        // Add option to select dropdown
         const option = document.createElement("option");
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
       });
 
-      // Add event listeners to delete buttons
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
@@ -67,7 +77,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Handle unregister functionality
+  async function fetchClubs() {
+    try {
+      const email = encodeURIComponent(studentEmailInput.value.trim());
+      const response = await fetch(`/clubs?email=${email}`);
+      if (!response.ok) throw new Error("Failed to load clubs");
+      const clubs = await response.json();
+
+      clubsList.innerHTML = clubs
+        .map(
+          (club) => `
+            <div class="club-card">
+              <h4>${club.name}</h4>
+              <p>${club.description}</p>
+              <p><strong>Category:</strong> ${club.category}</p>
+              <p><strong>Contact:</strong> ${club.contact_info}</p>
+              <button class="join-club-btn" type="button" data-club="${club.name}" ${club.is_member ? "disabled" : ""}>
+                ${club.is_member ? "Joined" : "Join club"}
+              </button>
+            </div>
+          `
+        )
+        .join("");
+
+      clubsList.querySelectorAll(".join-club-btn").forEach((button) => {
+        button.addEventListener("click", handleJoinClub);
+      });
+    } catch (error) {
+      clubsList.innerHTML = "<p>Failed to load clubs. Please try again later.</p>";
+      console.error("Error fetching clubs:", error);
+    }
+  }
+
+  async function handleJoinClub(event) {
+    const clubName = event.currentTarget.getAttribute("data-club");
+    const email = studentEmailInput.value.trim();
+    if (!studentEmailInput.reportValidity()) return;
+
+    try {
+      const response = await fetch(
+        `/clubs/${encodeURIComponent(clubName)}/join?email=${encodeURIComponent(email)}`,
+        { method: "POST" }
+      );
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "Could not join club");
+
+      showMessage(result.message, "success");
+      await Promise.all([fetchClubs(), fetchActivities()]);
+    } catch (error) {
+      showMessage(error.message || "Failed to join club. Please try again.", "error");
+    }
+  }
+
   async function handleUnregister(event) {
     const button = event.target;
     const activity = button.getAttribute("data-activity");
@@ -86,36 +147,23 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
-
-        // Refresh activities list to show updated participants
+        showMessage(result.message, "success");
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        showMessage(result.detail || "An error occurred", "error");
       }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to unregister. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showMessage("Failed to unregister. Please try again.", "error");
       console.error("Error unregistering:", error);
     }
   }
 
-  // Handle form submission
   signupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const email = document.getElementById("email").value;
+    const email = studentEmailInput.value.trim();
     const activity = document.getElementById("activity").value;
+    if (!studentEmailInput.reportValidity()) return;
 
     try {
       const response = await fetch(
@@ -130,31 +178,26 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        showMessage(result.message, "success");
         signupForm.reset();
-
-        // Refresh activities list to show updated participants
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        showMessage(result.detail || "An error occurred", "error");
       }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to sign up. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showMessage("Failed to sign up. Please try again.", "error");
       console.error("Error signing up:", error);
     }
   });
 
-  // Initialize app
+  studentEmailInput.addEventListener("input", () => {
+    localStorage.setItem("student-email", studentEmailInput.value);
+  });
+  studentEmailInput.addEventListener("change", () => {
+    fetchClubs();
+    fetchActivities();
+  });
+
   fetchActivities();
+  fetchClubs();
 });
